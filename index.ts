@@ -8,6 +8,8 @@ import {
   TextAttributes,
   BoxRenderable,
 } from "@opentui/core"
+import * as fs from "fs"
+import * as path from "path"
 
 // Color can be null for transparent
 type EntityColor = RGBA | null
@@ -100,10 +102,77 @@ interface HistorySnapshot {
   nextZIndex: number
 }
 
+// File format for saving/loading designs
+interface TigmaFile {
+  version: 1
+  textBoxes: SerializedTextBox[]
+  rectangles: SerializedRectangle[]
+  lines: SerializedLine[]
+  nextTextBoxId: number
+  nextRectId: number
+  nextLineId: number
+  nextZIndex: number
+}
+
+// Serialized versions with colors as arrays instead of RGBA objects
+interface SerializedColor {
+  r: number
+  g: number
+  b: number
+  a: number
+}
+
+interface SerializedTextChar {
+  char: string
+  bold: boolean
+  color: SerializedColor | null
+}
+
+interface SerializedTextBox {
+  id: number
+  x: number
+  y: number
+  chars: SerializedTextChar[]
+  zIndex: number
+  strokeColor: SerializedColor | null
+  fillColor: SerializedColor | null
+}
+
+interface SerializedRectangle {
+  id: number
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  bold: boolean
+  zIndex: number
+  strokeColor: SerializedColor | null
+  fillColor: SerializedColor | null
+}
+
+interface SerializedLine {
+  id: number
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  bold: boolean
+  zIndex: number
+  strokeColor: SerializedColor | null
+  fillColor: SerializedColor | null
+}
+
 class CanvasApp {
   private renderer: CliRenderer
   private boldMode = false
   private canvas: BoxRenderable
+  private currentFilePath: string | null = null
+  private saveStatusMessage: string | null = null
+  private saveStatusTimeout: number = 0
+
+  // Save prompt state
+  private showSavePrompt: boolean = false
+  private savePromptInput: string = ""
 
   // Canvas dimensions
   private gridWidth = 0
@@ -219,6 +288,18 @@ class CanvasApp {
     renderer.on("resize", (width: number, height: number) => {
       this.handleResize(width, height - this.TOOLBAR_HEIGHT)
     })
+
+    // Clean up resources when the renderer is destroyed (e.g., on Ctrl+C)
+    renderer.on("destroy", () => {
+      this.cleanup()
+    })
+  }
+
+  private cleanup(): void {
+    if (this.cursorBlinkInterval) {
+      clearInterval(this.cursorBlinkInterval)
+      this.cursorBlinkInterval = null
+    }
   }
 
   // ==================== Cursor Blink ====================
@@ -335,6 +416,232 @@ class CanvasApp {
     this.clearSelection()
 
     this.renderer.requestRender()
+  }
+
+  // ==================== File Save/Load ====================
+
+  private serializeColor(color: EntityColor): SerializedColor | null {
+    if (color === null) return null
+    return { r: color.r, g: color.g, b: color.b, a: color.a }
+  }
+
+  private deserializeColor(color: SerializedColor | null): EntityColor {
+    if (color === null) return null
+    return RGBA.fromValues(color.r, color.g, color.b, color.a)
+  }
+
+  private serializeTextBox(box: TextBox): SerializedTextBox {
+    return {
+      id: box.id,
+      x: box.x,
+      y: box.y,
+      chars: box.chars.map(c => ({
+        char: c.char,
+        bold: c.bold,
+        color: this.serializeColor(c.color),
+      })),
+      zIndex: box.zIndex,
+      strokeColor: this.serializeColor(box.strokeColor),
+      fillColor: this.serializeColor(box.fillColor),
+    }
+  }
+
+  private deserializeTextBox(box: SerializedTextBox): TextBox {
+    return {
+      id: box.id,
+      x: box.x,
+      y: box.y,
+      chars: box.chars.map(c => ({
+        char: c.char,
+        bold: c.bold,
+        color: this.deserializeColor(c.color),
+      })),
+      zIndex: box.zIndex,
+      strokeColor: this.deserializeColor(box.strokeColor),
+      fillColor: this.deserializeColor(box.fillColor),
+    }
+  }
+
+  private serializeRectangle(rect: Rectangle): SerializedRectangle {
+    return {
+      id: rect.id,
+      x1: rect.x1,
+      y1: rect.y1,
+      x2: rect.x2,
+      y2: rect.y2,
+      bold: rect.bold,
+      zIndex: rect.zIndex,
+      strokeColor: this.serializeColor(rect.strokeColor),
+      fillColor: this.serializeColor(rect.fillColor),
+    }
+  }
+
+  private deserializeRectangle(rect: SerializedRectangle): Rectangle {
+    return {
+      id: rect.id,
+      x1: rect.x1,
+      y1: rect.y1,
+      x2: rect.x2,
+      y2: rect.y2,
+      bold: rect.bold,
+      zIndex: rect.zIndex,
+      strokeColor: this.deserializeColor(rect.strokeColor),
+      fillColor: this.deserializeColor(rect.fillColor),
+    }
+  }
+
+  private serializeLine(line: Line): SerializedLine {
+    return {
+      id: line.id,
+      x1: line.x1,
+      y1: line.y1,
+      x2: line.x2,
+      y2: line.y2,
+      bold: line.bold,
+      zIndex: line.zIndex,
+      strokeColor: this.serializeColor(line.strokeColor),
+      fillColor: this.serializeColor(line.fillColor),
+    }
+  }
+
+  private deserializeLine(line: SerializedLine): Line {
+    return {
+      id: line.id,
+      x1: line.x1,
+      y1: line.y1,
+      x2: line.x2,
+      y2: line.y2,
+      bold: line.bold,
+      zIndex: line.zIndex,
+      strokeColor: this.deserializeColor(line.strokeColor),
+      fillColor: this.deserializeColor(line.fillColor),
+    }
+  }
+
+  private toFileData(): TigmaFile {
+    return {
+      version: 1,
+      textBoxes: this.textBoxes.map(b => this.serializeTextBox(b)),
+      rectangles: this.rectangles.map(r => this.serializeRectangle(r)),
+      lines: this.lines.map(l => this.serializeLine(l)),
+      nextTextBoxId: this.nextTextBoxId,
+      nextRectId: this.nextRectId,
+      nextLineId: this.nextLineId,
+      nextZIndex: this.nextZIndex,
+    }
+  }
+
+  private loadFromFileData(data: TigmaFile): void {
+    this.textBoxes = data.textBoxes.map(b => this.deserializeTextBox(b))
+    this.rectangles = data.rectangles.map(r => this.deserializeRectangle(r))
+    this.lines = data.lines.map(l => this.deserializeLine(l))
+    this.nextTextBoxId = data.nextTextBoxId
+    this.nextRectId = data.nextRectId
+    this.nextLineId = data.nextLineId
+    this.nextZIndex = data.nextZIndex
+    
+    // Reset UI state
+    this.activeTextBoxId = null
+    this.hoveredTextBoxId = null
+    this.hoveredRectId = null
+    this.hoveredLineId = null
+    this.clearSelection()
+    this.historyStack = []
+    this.redoStack = []
+    
+    this.renderer.requestRender()
+  }
+
+  public loadFile(filePath: string): boolean {
+    try {
+      const absolutePath = path.resolve(filePath)
+      const content = fs.readFileSync(absolutePath, "utf-8")
+      const data = JSON.parse(content) as TigmaFile
+      
+      if (data.version !== 1) {
+        console.error(`Unsupported file version: ${data.version}`)
+        return false
+      }
+      
+      this.loadFromFileData(data)
+      this.currentFilePath = absolutePath
+      return true
+    } catch (err) {
+      console.error(`Failed to load file: ${err}`)
+      return false
+    }
+  }
+
+  private saveFile(): void {
+    if (this.currentFilePath) {
+      // Save directly to the current file
+      this.doSaveFile(this.currentFilePath)
+    } else {
+      // Show prompt to ask for filename
+      this.showSavePrompt = true
+      this.savePromptInput = "design.tigma"
+      this.renderer.requestRender()
+    }
+  }
+
+  private doSaveFile(filename: string): void {
+    try {
+      const filePath = path.resolve(filename)
+      const data = this.toFileData()
+      fs.writeFileSync(filePath, JSON.stringify(data, null, 2))
+      this.currentFilePath = filePath
+      this.saveStatusMessage = `Saved to ${path.basename(filePath)}`
+      this.saveStatusTimeout = Date.now() + 2000  // Show for 2 seconds
+      this.renderer.requestRender()
+    } catch (err) {
+      this.saveStatusMessage = `Save failed: ${err}`
+      this.saveStatusTimeout = Date.now() + 3000
+      this.renderer.requestRender()
+    }
+  }
+
+  private closeSavePrompt(): void {
+    this.showSavePrompt = false
+    this.savePromptInput = ""
+    this.renderer.requestRender()
+  }
+
+  private handleSavePromptKey(key: KeyEvent): boolean {
+    if (!this.showSavePrompt) return false
+
+    // Let Ctrl+C pass through for exit handling
+    if (key.name === "c" && key.ctrl) {
+      return false
+    }
+
+    if (key.name === "escape") {
+      this.closeSavePrompt()
+      return true
+    }
+
+    if (key.name === "return") {
+      const filename = this.savePromptInput.trim() || "design.tigma"
+      this.closeSavePrompt()
+      this.doSaveFile(filename)
+      return true
+    }
+
+    if (key.name === "backspace") {
+      if (this.savePromptInput.length > 0) {
+        this.savePromptInput = this.savePromptInput.slice(0, -1)
+        this.renderer.requestRender()
+      }
+      return true
+    }
+
+    // Regular character input
+    if (key.sequence && key.sequence.length === 1 && !key.ctrl && !key.meta) {
+      this.savePromptInput += key.sequence
+      this.renderer.requestRender()
+      return true
+    }
+
+    return true  // Consume all keys when prompt is open
   }
 
   // ==================== Selection Helpers ====================
@@ -1328,6 +1635,103 @@ class CanvasApp {
 
     // Draw toolbar
     this.renderToolbar(buffer)
+
+    // Draw save prompt modal if active
+    if (this.showSavePrompt) {
+      this.renderSavePrompt(buffer)
+    }
+  }
+
+  private renderSavePrompt(buffer: OptimizedBuffer): void {
+    const promptWidth = 40
+    const promptHeight = 5
+    const startX = Math.floor((this.gridWidth - promptWidth) / 2)
+    const startY = Math.floor((this.gridHeight - promptHeight) / 2)
+    
+    const borderColor = RGBA.fromInts(100, 150, 255, 255)
+    const bgColor = RGBA.fromInts(20, 20, 30, 255)
+    const textColor = RGBA.fromInts(255, 255, 255, 255)
+    const inputBgColor = RGBA.fromInts(40, 40, 50, 255)
+    
+    // Draw background
+    for (let y = startY; y < startY + promptHeight; y++) {
+      for (let x = startX; x < startX + promptWidth; x++) {
+        if (x >= 0 && x < this.gridWidth && y >= 0 && y < this.gridHeight) {
+          buffer.setCell(x, y, " ", textColor, bgColor, 0)
+        }
+      }
+    }
+    
+    // Draw border
+    for (let x = startX; x < startX + promptWidth; x++) {
+      if (x >= 0 && x < this.gridWidth) {
+        if (startY >= 0 && startY < this.gridHeight) {
+          buffer.setCell(x, startY, "─", borderColor, bgColor, 0)
+        }
+        if (startY + promptHeight - 1 >= 0 && startY + promptHeight - 1 < this.gridHeight) {
+          buffer.setCell(x, startY + promptHeight - 1, "─", borderColor, bgColor, 0)
+        }
+      }
+    }
+    for (let y = startY; y < startY + promptHeight; y++) {
+      if (y >= 0 && y < this.gridHeight) {
+        if (startX >= 0 && startX < this.gridWidth) {
+          buffer.setCell(startX, y, "│", borderColor, bgColor, 0)
+        }
+        if (startX + promptWidth - 1 >= 0 && startX + promptWidth - 1 < this.gridWidth) {
+          buffer.setCell(startX + promptWidth - 1, y, "│", borderColor, bgColor, 0)
+        }
+      }
+    }
+    // Corners
+    if (startX >= 0 && startY >= 0) buffer.setCell(startX, startY, "┌", borderColor, bgColor, 0)
+    if (startX + promptWidth - 1 < this.gridWidth && startY >= 0) buffer.setCell(startX + promptWidth - 1, startY, "┐", borderColor, bgColor, 0)
+    if (startX >= 0 && startY + promptHeight - 1 < this.gridHeight) buffer.setCell(startX, startY + promptHeight - 1, "└", borderColor, bgColor, 0)
+    if (startX + promptWidth - 1 < this.gridWidth && startY + promptHeight - 1 < this.gridHeight) buffer.setCell(startX + promptWidth - 1, startY + promptHeight - 1, "┘", borderColor, bgColor, 0)
+    
+    // Draw title
+    const title = " Save As "
+    const titleX = startX + Math.floor((promptWidth - title.length) / 2)
+    for (let i = 0; i < title.length; i++) {
+      if (titleX + i >= 0 && titleX + i < this.gridWidth && startY >= 0 && startY < this.gridHeight) {
+        buffer.setCell(titleX + i, startY, title[i]!, borderColor, bgColor, 0)
+      }
+    }
+    
+    // Draw input field background
+    const inputY = startY + 2
+    const inputX = startX + 2
+    const inputWidth = promptWidth - 4
+    for (let x = inputX; x < inputX + inputWidth; x++) {
+      if (x >= 0 && x < this.gridWidth && inputY >= 0 && inputY < this.gridHeight) {
+        buffer.setCell(x, inputY, " ", textColor, inputBgColor, 0)
+      }
+    }
+    
+    // Draw input text
+    const displayText = this.savePromptInput.slice(-(inputWidth - 1))  // Show end if too long
+    for (let i = 0; i < displayText.length; i++) {
+      if (inputX + i >= 0 && inputX + i < this.gridWidth && inputY >= 0 && inputY < this.gridHeight) {
+        buffer.setCell(inputX + i, inputY, displayText[i]!, textColor, inputBgColor, 0)
+      }
+    }
+    
+    // Draw cursor
+    const cursorX = inputX + displayText.length
+    if (cursorX >= 0 && cursorX < inputX + inputWidth && inputY >= 0 && inputY < this.gridHeight) {
+      buffer.setCell(cursorX, inputY, "▏", borderColor, inputBgColor, 0)
+    }
+    
+    // Draw hint
+    const hint = "Enter to save, Esc to cancel"
+    const hintX = startX + Math.floor((promptWidth - hint.length) / 2)
+    const hintY = startY + promptHeight - 2
+    const hintColor = RGBA.fromInts(150, 150, 150, 255)
+    for (let i = 0; i < hint.length; i++) {
+      if (hintX + i >= 0 && hintX + i < this.gridWidth && hintY >= 0 && hintY < this.gridHeight) {
+        buffer.setCell(hintX + i, hintY, hint[i]!, hintColor, bgColor, 0)
+      }
+    }
   }
 
   private renderTextBox(buffer: OptimizedBuffer, box: TextBox, isHovered: boolean, isSelected: boolean = false): void {
@@ -1879,17 +2283,29 @@ class CanvasApp {
 
     drawText(modeText, this.toolbarTextColor)
 
-    // Show undo/redo status
-    const undoCount = this.historyStack.length
-    const redoCount = this.redoStack.length
-    const historyText = ` | ^Z Undo:${undoCount} ^U Redo:${redoCount} `
-    const historyStartX = width - historyText.length
-    if (historyStartX > x) {
-      x = historyStartX
-      const historyColor = (undoCount > 0 || redoCount > 0) 
-        ? this.toolbarActiveColor 
-        : this.toolbarTextColor
-      drawText(historyText, historyColor)
+    // Show save status message if active
+    if (this.saveStatusMessage && Date.now() < this.saveStatusTimeout) {
+      const statusText = ` | ${this.saveStatusMessage} `
+      const statusStartX = width - statusText.length
+      if (statusStartX > x) {
+        x = statusStartX
+        drawText(statusText, this.toolbarActiveColor)
+      }
+    } else {
+      this.saveStatusMessage = null
+      
+      // Show undo/redo status
+      const undoCount = this.historyStack.length
+      const redoCount = this.redoStack.length
+      const historyText = ` | ^Z Undo:${undoCount} ^U Redo:${redoCount} `
+      const historyStartX = width - historyText.length
+      if (historyStartX > x) {
+        x = historyStartX
+        const historyColor = (undoCount > 0 || redoCount > 0) 
+          ? this.toolbarActiveColor 
+          : this.toolbarTextColor
+        drawText(historyText, historyColor)
+      }
     }
   }
 
@@ -1897,8 +2313,17 @@ class CanvasApp {
 
   private setupInput(): void {
     this.renderer.keyInput.on("keypress", (key: KeyEvent) => {
+      // Handle save prompt input first
+      if (this.handleSavePromptKey(key)) {
+        return
+      }
+
       // When editing text, only handle text input and escape
+      // Let Ctrl+C pass through for exit handling
       if (this.activeTextBoxId !== null) {
+        if (key.name === "c" && key.ctrl) {
+          return  // Let the renderer's exitOnCtrlC handler process this
+        }
         if (key.name === "escape") {
           this.commitActiveTextBox()
           this.setTool("move")
@@ -1926,6 +2351,12 @@ class CanvasApp {
           this.setTool("line")
           return
         }
+      }
+
+      // Save file
+      if (key.name === "s" && key.ctrl && !key.meta) {
+        this.saveFile()
+        return
       }
 
       // Undo/Redo
@@ -2072,7 +2503,14 @@ async function main() {
 
   renderer.setBackgroundColor(RGBA.fromInts(0, 0, 0, 255))
 
-  new CanvasApp(renderer)
+  const app = new CanvasApp(renderer)
+
+  // Check for filename argument
+  const args = process.argv.slice(2)
+  if (args.length > 0) {
+    const filePath = args[0]!
+    app.loadFile(filePath)
+  }
 
   renderer.start()
 }
