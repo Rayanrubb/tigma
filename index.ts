@@ -63,15 +63,15 @@ const STROKE_PALETTE: (RGBA | null)[] = [
   RGBA.fromInts(255, 255, 100, 255), // yellow
 ]
 
-// Color palette for fills (Tailwind 700-800 level colors - good for backgrounds)
+// Color palette for fills (muted/darker versions for backgrounds)
 const FILL_PALETTE: (RGBA | null)[] = [
   null, // transparent
   RGBA.fromInts(0, 0, 0, 255),       // black
-  RGBA.fromInts(63, 63, 70, 255),    // zinc-700
-  RGBA.fromInts(127, 29, 29, 255),   // red-900 (more muted)
-  RGBA.fromInts(21, 128, 61, 255),   // green-700
-  RGBA.fromInts(29, 78, 216, 255),   // blue-700
-  RGBA.fromInts(161, 98, 7, 255),    // yellow-700
+  RGBA.fromInts(60, 60, 60, 255),    // muted white/gray
+  RGBA.fromInts(80, 30, 30, 255),    // muted red
+  RGBA.fromInts(30, 80, 30, 255),    // muted green
+  RGBA.fromInts(30, 30, 80, 255),    // muted blue
+  RGBA.fromInts(80, 80, 30, 255),    // muted yellow
 ]
 
 type Tool = "move" | "text" | "rectangle" | "line"
@@ -675,7 +675,7 @@ class CanvasApp {
             chars: [],
             zIndex: this.nextZIndex++,
             strokeColor: this.currentStrokeColor,
-            fillColor: this.currentFillColor,
+            fillColor: null,  // Text always starts with transparent fill
           }
           this.textBoxes.push(newBox)
           this.activeTextBoxId = newBox.id
@@ -1372,7 +1372,9 @@ class CanvasApp {
 
     const drawBorderCell = (x: number, y: number, char: string) => {
       if (x >= 0 && x < this.gridWidth && y >= 0 && y < this.gridHeight) {
-        buffer.setCell(x, y, char, borderColor, this.bgColor, 0)
+        // Preserve the existing background color
+        const bg = this.readBufferBg(buffer, x, y)
+        buffer.setCell(x, y, char, borderColor, bg, 0)
       }
     }
 
