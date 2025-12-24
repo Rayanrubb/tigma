@@ -661,6 +661,29 @@ class CanvasApp {
     return true
   }
 
+  private clearCanvas(): void {
+    // Don't clear if canvas is already empty
+    if (this.textBoxes.length === 0 && this.rectangles.length === 0 &&
+        this.lines.length === 0 && this.freehands.length === 0) {
+      return
+    }
+
+    this.saveSnapshot()
+
+    this.textBoxes = []
+    this.rectangles = []
+    this.lines = []
+    this.freehands = []
+    this.activeTextBoxId = null
+    this.clearSelection()
+    this.hoveredTextBoxId = null
+    this.hoveredRectId = null
+    this.hoveredLineId = null
+    this.hoveredFreehandId = null
+
+    this.renderer.requestRender()
+  }
+
   // ==================== File Save/Load ====================
 
   private serializeColor(color: EntityColor): SerializedColor | null {
@@ -3054,6 +3077,12 @@ class CanvasApp {
       }
       if (key.name === "x" && key.ctrl && !key.meta) {
         this.cut()
+        return
+      }
+
+      // Clear canvas
+      if (key.name === "l" && key.ctrl && !key.meta) {
+        this.clearCanvas()
         return
       }
 

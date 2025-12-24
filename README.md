@@ -44,6 +44,7 @@ Switch between tools using keyboard shortcuts:
 | `Ctrl+D` | Copy selected objects to clipboard |
 | `Ctrl+V` | Paste at mouse position |
 | `Ctrl+X` | Cut (copy and delete) selected objects |
+| `Ctrl+L` | Clear canvas (delete all objects) |
 | `Delete` / `Backspace` | Delete selected or hovered object(s) |
 | `Escape` | Cancel current drawing / exit text editing |
 
