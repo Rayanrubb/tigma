@@ -262,6 +262,8 @@ class CanvasApp {
   private moveOffsetY = 0
   private mouseDownX = 0
   private mouseDownY = 0
+  private lastMouseX = 0  // Track current mouse position for paste
+  private lastMouseY = 0
   private hasDragged = false
   private clickedOnSelectedTextBox = false
 
@@ -269,6 +271,20 @@ class CanvasApp {
   private historyStack: HistorySnapshot[] = []
   private redoStack: HistorySnapshot[] = []
   private readonly MAX_HISTORY = 100
+
+  // Clipboard for copy/paste
+  private clipboard: {
+    textBoxes: TextBox[]
+    rectangles: Rectangle[]
+    lines: Line[]
+    freehands: Freehand[]
+    // Store the bounding box of copied items for offset calculation
+    minX: number
+    minY: number
+  } | null = null
+  private pasteOffset = 0 // Increments with each paste to offset position
+  private lastPasteX = -1 // Track mouse position of last paste
+  private lastPasteY = -1
 
   // Current stroke and fill colors for new entities
   private currentStrokeColor: EntityColor = RGBA.fromInts(255, 255, 255, 255) // white
@@ -464,6 +480,185 @@ class CanvasApp {
     this.clearSelection()
 
     this.renderer.requestRender()
+  }
+
+  // ==================== Clipboard (Copy/Paste/Cut) ====================
+
+  private copySelection(): boolean {
+    if (!this.hasSelection()) return false
+
+    // Collect selected objects
+    const selectedTextBoxes: TextBox[] = []
+    const selectedRectangles: Rectangle[] = []
+    const selectedLines: Line[] = []
+    const selectedFreehands: Freehand[] = []
+
+    for (const id of this.selectedTextBoxIds) {
+      const box = this.textBoxes.find(b => b.id === id)
+      if (box) selectedTextBoxes.push(box)
+    }
+    for (const id of this.selectedRectIds) {
+      const rect = this.rectangles.find(r => r.id === id)
+      if (rect) selectedRectangles.push(rect)
+    }
+    for (const id of this.selectedLineIds) {
+      const line = this.lines.find(l => l.id === id)
+      if (line) selectedLines.push(line)
+    }
+    for (const id of this.selectedFreehandIds) {
+      const fh = this.freehands.find(f => f.id === id)
+      if (fh) selectedFreehands.push(fh)
+    }
+
+    // Calculate bounding box of all selected items
+    let minX = Infinity, minY = Infinity
+    for (const box of selectedTextBoxes) {
+      minX = Math.min(minX, box.x)
+      minY = Math.min(minY, box.y)
+    }
+    for (const rect of selectedRectangles) {
+      minX = Math.min(minX, Math.min(rect.x1, rect.x2))
+      minY = Math.min(minY, Math.min(rect.y1, rect.y2))
+    }
+    for (const line of selectedLines) {
+      minX = Math.min(minX, Math.min(line.x1, line.x2))
+      minY = Math.min(minY, Math.min(line.y1, line.y2))
+    }
+    for (const fh of selectedFreehands) {
+      for (const p of fh.points) {
+        minX = Math.min(minX, p.x)
+        minY = Math.min(minY, p.y)
+      }
+    }
+
+    // Clone and store in clipboard
+    this.clipboard = {
+      textBoxes: this.cloneTextBoxes(selectedTextBoxes),
+      rectangles: this.cloneRectangles(selectedRectangles),
+      lines: this.cloneLines(selectedLines),
+      freehands: this.cloneFreehands(selectedFreehands),
+      minX,
+      minY,
+    }
+    this.pasteOffset = 0 // Reset paste offset on new copy
+
+    return true
+  }
+
+  private paste(): boolean {
+    if (!this.clipboard) return false
+
+    this.saveSnapshot()
+
+    // Reset offset if mouse moved to a new position
+    if (this.lastMouseX !== this.lastPasteX || this.lastMouseY !== this.lastPasteY) {
+      this.pasteOffset = 0
+      this.lastPasteX = this.lastMouseX
+      this.lastPasteY = this.lastMouseY
+    }
+
+    // Calculate offset: move clipboard origin (minX, minY) to mouse position
+    // Then add incremental offset for repeated pastes (Figma-style)
+    const baseOffsetX = this.lastMouseX - this.clipboard.minX
+    const baseOffsetY = this.lastMouseY - this.clipboard.minY
+    const offsetX = baseOffsetX + this.pasteOffset
+    const offsetY = baseOffsetY + this.pasteOffset
+
+    this.pasteOffset += 2 // Increment for next paste at same position
+
+    const newTextBoxIds: number[] = []
+    const newRectIds: number[] = []
+    const newLineIds: number[] = []
+    const newFreehandIds: number[] = []
+
+    // Paste text boxes
+    for (const box of this.clipboard.textBoxes) {
+      const newBox: TextBox = {
+        ...box,
+        id: this.nextTextBoxId++,
+        x: box.x + offsetX,
+        y: box.y + offsetY,
+        zIndex: this.nextZIndex++,
+        chars: box.chars.map(c => ({ ...c })),
+      }
+      this.textBoxes.push(newBox)
+      newTextBoxIds.push(newBox.id)
+    }
+
+    // Paste rectangles
+    for (const rect of this.clipboard.rectangles) {
+      const newRect: Rectangle = {
+        ...rect,
+        id: this.nextRectId++,
+        x1: rect.x1 + offsetX,
+        y1: rect.y1 + offsetY,
+        x2: rect.x2 + offsetX,
+        y2: rect.y2 + offsetY,
+        zIndex: this.nextZIndex++,
+      }
+      this.rectangles.push(newRect)
+      newRectIds.push(newRect.id)
+    }
+
+    // Paste lines
+    for (const line of this.clipboard.lines) {
+      const newLine: Line = {
+        ...line,
+        id: this.nextLineId++,
+        x1: line.x1 + offsetX,
+        y1: line.y1 + offsetY,
+        x2: line.x2 + offsetX,
+        y2: line.y2 + offsetY,
+        zIndex: this.nextZIndex++,
+      }
+      this.lines.push(newLine)
+      newLineIds.push(newLine.id)
+    }
+
+    // Paste freehands
+    for (const fh of this.clipboard.freehands) {
+      const newFh: Freehand = {
+        ...fh,
+        id: this.nextFreehandId++,
+        points: fh.points.map(p => ({ x: p.x + offsetX, y: p.y + offsetY })),
+        zIndex: this.nextZIndex++,
+      }
+      this.freehands.push(newFh)
+      newFreehandIds.push(newFh.id)
+    }
+
+    // Select newly pasted items
+    this.clearSelection()
+    for (const id of newTextBoxIds) this.selectedTextBoxIds.add(id)
+    for (const id of newRectIds) this.selectedRectIds.add(id)
+    for (const id of newLineIds) this.selectedLineIds.add(id)
+    for (const id of newFreehandIds) this.selectedFreehandIds.add(id)
+
+    this.renderer.requestRender()
+    return true
+  }
+
+  private cut(): boolean {
+    if (!this.copySelection()) return false
+
+    // Delete selected items
+    this.saveSnapshot()
+    for (const id of this.selectedTextBoxIds) {
+      this.textBoxes = this.textBoxes.filter(b => b.id !== id)
+    }
+    for (const id of this.selectedRectIds) {
+      this.rectangles = this.rectangles.filter(r => r.id !== id)
+    }
+    for (const id of this.selectedLineIds) {
+      this.lines = this.lines.filter(l => l.id !== id)
+    }
+    for (const id of this.selectedFreehandIds) {
+      this.freehands = this.freehands.filter(f => f.id !== id)
+    }
+    this.clearSelection()
+
+    this.renderer.requestRender()
+    return true
   }
 
   // ==================== File Save/Load ====================
@@ -831,6 +1026,10 @@ class CanvasApp {
     if (event.y >= this.gridHeight) {
       return
     }
+
+    // Track mouse position for paste-at-cursor feature
+    this.lastMouseX = event.x
+    this.lastMouseY = event.y
 
     // Check for color picker clicks first
     if (event.type === "down") {
@@ -2763,15 +2962,17 @@ class CanvasApp {
     } else {
       this.saveStatusMessage = null
       
-      // Show undo/redo status
+      // Show clipboard and undo/redo status
       const undoCount = this.historyStack.length
       const redoCount = this.redoStack.length
-      const historyText = ` | ^Z Undo:${undoCount} ^U Redo:${redoCount} `
+      const hasClipboard = this.clipboard !== null
+      const clipboardText = hasClipboard ? `^D Copy ^V Paste ^X Cut` : `^D Copy`
+      const historyText = ` | ${clipboardText} | ^Z Undo:${undoCount} ^U Redo:${redoCount} `
       const historyStartX = width - historyText.length
       if (historyStartX > x) {
         x = historyStartX
-        const historyColor = (undoCount > 0 || redoCount > 0) 
-          ? this.toolbarActiveColor 
+        const historyColor = (undoCount > 0 || redoCount > 0 || hasClipboard)
+          ? this.toolbarActiveColor
           : this.toolbarTextColor
         drawText(historyText, historyColor)
       }
@@ -2839,6 +3040,20 @@ class CanvasApp {
       }
       if (key.name === "u" && key.ctrl && !key.meta) {
         this.redo()
+        return
+      }
+
+      // Copy/Paste/Cut (Ctrl+D to copy, avoiding Ctrl+C which exits terminal)
+      if (key.name === "d" && key.ctrl && !key.meta) {
+        this.copySelection()
+        return
+      }
+      if (key.name === "v" && key.ctrl && !key.meta) {
+        this.paste()
+        return
+      }
+      if (key.name === "x" && key.ctrl && !key.meta) {
+        this.cut()
         return
       }
 

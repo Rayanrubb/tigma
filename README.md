@@ -41,6 +41,9 @@ Switch between tools using keyboard shortcuts:
 | `Ctrl+S` | Save file (prompts for filename if new) |
 | `Ctrl+Z` | Undo |
 | `Ctrl+U` | Redo |
+| `Ctrl+D` | Copy selected objects to clipboard |
+| `Ctrl+V` | Paste at mouse position |
+| `Ctrl+X` | Cut (copy and delete) selected objects |
 | `Delete` / `Backspace` | Delete selected or hovered object(s) |
 | `Escape` | Cancel current drawing / exit text editing |
 
@@ -138,6 +141,7 @@ Designs are saved as `.tigma` files in JSON format. The file stores:
 
 - **Layered rendering**: Objects stack based on z-index; newer objects appear on top by default
 - **Multi-selection**: Select multiple objects with Shift+Click or box-select
+- **Copy/Paste**: Copy objects with `Ctrl+D`, paste at mouse position with `Ctrl+V`
 - **Undo/Redo**: Up to 100 history snapshots
 - **Terminal responsive**: Adapts to terminal resize events
 - **Mouse support**: Full mouse interaction including hover highlighting
