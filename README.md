@@ -2,6 +2,14 @@
 
 A terminal-based design tool for creating ASCII diagrams and designs.
 
+## Contributing
+
+I'll be honest: mot of this code was written by AI (specifically Opus 4.5). This project is mostly experimental and I do not intend it to become a real production-ready big project. For now, it's fun.
+
+The best way to work with this code right now is with AI assistance. The has low abstractions which is easy to read and debug, but it's more difficult to write manually because of the lack of abstractions. AI will help keep everything consistent.
+
+I specifically used Opus 4.5 to work with this. You may find that to be the best model with this structure, but I haven't tried others. When opening PRs, please don't include a bunch of changes unrelated to the intent.
+
 ## Running
 
 ```bash
