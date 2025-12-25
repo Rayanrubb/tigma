@@ -197,7 +197,13 @@ class CanvasApp {
   private nextZIndex = 1
 
   // Tool state
-  private currentTool: Tool = "move"
+  private currentTool: Tool = "text"
+  // Double-click detection to switch to text tool when clicking empty space
+  private lastClickTime: number = 0
+  private lastClickX: number = -999
+  private lastClickY: number = -999
+  private readonly DOUBLE_CLICK_MS: number = 350
+  private readonly DOUBLE_CLICK_DIST: number = 1
   private isDrawingRect = false
   private isDrawingLine = false
   private drawStartX = 0
@@ -855,6 +861,46 @@ class CanvasApp {
         this.commitActiveTextBox()
         this.setTool("move")
         // Don't return - continue to handle the click in Move mode
+      }
+
+      // Double-click on empty space -> immediately switch to Text tool
+      // (detect two down events close in time/position and ensure no object under cursor)
+      const now = Date.now()
+      const clickedText = this.getTextBoxAt(event.x, event.y)
+      const clickedRect = this.getRectangleAt(event.x, event.y)
+      const clickedLine = this.getLineAt(event.x, event.y)
+      const isEmptySpace = !clickedText && !clickedRect && !clickedLine
+
+      if (isEmptySpace) {
+        const withinTime = now - this.lastClickTime <= this.DOUBLE_CLICK_MS
+        const withinDist = Math.abs(event.x - this.lastClickX) <= this.DOUBLE_CLICK_DIST && Math.abs(event.y - this.lastClickY) <= this.DOUBLE_CLICK_DIST
+        if (withinTime && withinDist) {
+          this.setTool("text")
+          // Create a new text box at the clicked position and enter edit mode
+          this.saveSnapshot()
+          const newBox: TextBox = {
+            id: this.nextTextBoxId++,
+            x: event.x,
+            y: event.y,
+            chars: [],
+            zIndex: this.nextZIndex++,
+            strokeColor: this.currentStrokeColor,
+            fillColor: null,
+          }
+          this.textBoxes.push(newBox)
+          this.activeTextBoxId = newBox.id
+          this.textCursorPos = 0
+          this.resetCursorBlink()
+          this.lastClickTime = 0
+          this.lastClickX = -999
+          this.lastClickY = -999
+          this.renderer.requestRender()
+          return
+        }
+        // record this click for potential double-click
+        this.lastClickTime = now
+        this.lastClickX = event.x
+        this.lastClickY = event.y
       }
 
       // Move tool: select and move existing objects
